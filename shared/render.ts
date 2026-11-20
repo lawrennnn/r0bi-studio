@@ -204,7 +204,7 @@ export function buildRenderPlan(project: Project, opts: RenderPlanOptions): Rend
     parts.push(c)
     labels.push(`[a${i}]`)
   }
-  if (labels.length === 0) parts.push(`anullsrc=r=${SAMPLE_RATE}:cl=stereo:d=${total}[aout]`)
+  if (labels.length === 0) parts.push(`anullsrc=r=${SAMPLE_RATE}:cl=stereo,atrim=end=${total}[aout]`)
   else if (labels.length === 1) parts.push(`${labels[0]}atrim=end=${total}[aout]`)
   else parts.push(`${labels.join('')}amix=inputs=${labels.length}:duration=longest:dropout_transition=0,volume=${labels.length},atrim=end=${total}[aout]`)
 

@@ -38,6 +38,28 @@ function execFfmpeg(bin: string, args: string[], opts: { timeoutMs: number; sign
   })
 }
 
+async function removeFileWithRetry(file: string): Promise<void> {
+  const maxAttempts = 40
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await fs.rm(file, { force: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+
+      if (
+        !['EBUSY', 'EPERM', 'EACCES'].includes(code ?? '') ||
+        attempt === maxAttempts - 1
+      ) {
+        throw error
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+}
+
 async function exists(p: string): Promise<boolean> {
   try {
     await fs.access(p)
@@ -240,8 +262,12 @@ export class MediaService {
       await fs.rename(tmp, out)
       return rel
     } catch (e) {
-      await fs.rm(tmp, { force: true })
-      if (ctl.signal.aborted) throw new Error('Proxy cancelled')
+      await removeFileWithRetry(tmp)
+
+      if (ctl.signal.aborted) {
+        throw new Error('Proxy cancelled')
+      }
+
       void e
       throw new Error('Proxy generation failed')
     } finally {
