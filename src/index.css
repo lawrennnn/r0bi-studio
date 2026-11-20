@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: #14161a;
+  color: #e7eaf0;
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+input, textarea, select { user-select: text; }
+:focus-visible { outline: 2px solid #2f7bff; outline-offset: 1px; }
+* { scrollbar-width: thin; scrollbar-color: #3a4150 transparent; }
+
+@layer components {
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-200 transition-colors hover:bg-ink-600 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent;
+  }
+  .icon-btn-sm { @apply h-6 w-6; }
+  .btn {
+    @apply inline-flex h-8 items-center gap-2 rounded-md border border-ink-600 bg-ink-700 px-3 text-ink-100 transition-colors hover:bg-ink-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-ink-700;
+  }
+  .btn-primary { @apply border-accent bg-accent text-white hover:bg-accent-hover disabled:hover:bg-accent; }
+  .field {
+    @apply h-8 w-full rounded-md border border-ink-600 bg-ink-900 px-2 text-ink-100 placeholder:text-ink-300 focus:border-accent;
+  }
+  .panel-title { @apply text-xs font-semibold text-ink-200; }
+}

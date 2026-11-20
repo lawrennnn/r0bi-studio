@@ -1,0 +1,41 @@
+# Known issues
+- Phases 2 and 3 UI have not been exercised on Windows yet. Timeline logic is unit/fuzz tested, but real mouse drag, trim handles and drag-from-library are untested.
+- Timeline does not auto-scroll while dragging near its edges; zoom out or use Fit first.
+- Single selection only; no group move, ripple delete or overwrite mode.
+- Changing frame rate then undoing restores clips but the playhead stays at its converted position.
+- Scene manager (scene notes, scene-level thumbnails) is not built yet; clips are edited directly on tracks.
+- Preview has not been run on Windows. Chromium may not decode every source (for example HEVC or ProRes in MOV/MKV); those show a message and need a proxy.
+- Preview shows no transitions/effects yet and ignores clip volume/fades (Phase 5/6). Several simultaneous video layers decode in parallel and can stutter on heavy 4K sources; use proxies.
+- Preview has Fit scaling only (no 50%/100% zoom).
+- Seeking a paused video lands on the nearest decodable frame, so stepping can look one frame off on long-GOP sources; proxies are more precise.
+- Bundled FFmpeg is version 4.1 (2018). Works for probing, thumbnails and proxies; install a current FFmpeg on PATH for best results (PATH takes priority automatically).
+- Removing media from the project leaves its thumbnail/proxy files in assets/ (no cleanup yet).
+- Proxy progress is a spinner only (no percentage); a proper progress queue arrives with rendering in Phase 6.
+- Waveform thumbnails for very long audio (over about an hour) may time out after 60 s and fall back to an icon.
+- "New project" closes the current view first; cancelling the folder dialog leaves you on the welcome screen (project is still on disk).
+- Timeline shows a fixed 120 s ruler until clips define the duration.
+- SQLite and shadcn/ui not installed (see DECISIONS.md).
+- Volume cannot exceed 100%; no keyframed volume curves; fades are linear only.
+- Video clips' own sound uses the clip/track level and fades, but there is no separate "extract audio" clip yet.
+- Waveforms only for audio files (not for the sound inside video clips); very long audio (over about 3 minutes of decoding time) gives up and shows no waveform.
+- Subtitles: SRT import only (no export, no ASS/VTT); no per-word or per-cue styling; one style per track; the list is not virtualised, so thousands of cues will scroll slowly. Subtitle look in the preview is an approximation of the final burned-in export.
+- Subtitle tracks cannot be renamed or deleted yet; the Phase 1 track controls are unchanged.
+- Export: H.264/AAC MP4 only; fps always equals the project fps; no custom bitrate, no 2-pass, no audio loudness normalisation or limiter (loud mixes can clip); no transitions/effects yet (cuts only).
+- Export: subtitle images are drawn at export time, which takes a few seconds per hundred distinct subtitles and cannot be cancelled while that happens; very long, line-wrapped Khmer text may break lines slightly differently from the preview.
+- Export: projects with hundreds of clips may exceed the Windows command-line limit and are refused with a message; export in parts.
+- Export: only one job renders at a time; progress after a crash/quit is not restored.
+- Export tests ran on a 2018 FFmpeg build (the bundled fallback). A current FFmpeg on PATH is preferred and should work, but is untested here.
+- Assistant: never tried against the live Claude API; model names (claude-haiku-5-5 / sonnet-5-5 / opus-5-5) come from Anthropic's current list and may need changing in Settings. If Claude's reply does not match the schema the user sees an error and nothing changes.
+- Assistant: it cannot hear or see the media (only names, durations, positions, levels, optional thumbnails), so "synchronize narration with scenes" and "make it more exciting" produce timing-based suggestions, and "add subtitles from my script" estimates timing from text length. It is told to say so and ask when unsure.
+- Assistant: no zoom, position or opacity animation, effects, transcription or importing files; these are refused with an explanation. Only fades and dip to black exist as transitions; no true crossfade on one track.
+- Assistant: set_export_settings changes dialog settings, which are not part of project undo. Chat history is kept in memory only and cleared when the project changes.
+- Assistant: plans are capped at 50 commands and the project data sent is capped (400 clips, 300 subtitles, 160 characters of subtitle text); larger projects are truncated and the model is told.
+- Automation: assembly only uses the video/image/audio items already in the library and does not detect scene changes or loop music; still-image stretching is equal-length only. Templates do not store individual clips or subtitle text.
+- Automation: a template's "New project..." goes through the normal create-project dialog; cancelling it leaves the current project untouched. Applying a template cannot remove tracks.
+- Automation: scenes remember media by absolute path; if the files are moved or deleted the scene cannot be inserted until they are back (the message names them). Project-relative media is stored with its full path at save time.
+- Batch export: every job rasterises its own subtitles and the queue renders one video at a time, so large batches take a while. Failed jobs are listed; there is no automatic retry. Batch uses the encoder and output-folder choice from the Export window.
+- No keyboard shortcuts for automation yet.
+- Effects: zoom cannot go below 100% (no shrink-to-fit / picture-in-picture) and there are no keyframes beyond a straight start-to-end move. Exporting a zoom is slower (each frame is scaled up 2x first). Effects and notes are not saved inside Scenes (automation) or set by the AI assistant.
+- Effects: a still image or video with a zoom shows the zoom through its whole clip length; trimming the clip changes the speed of the motion.
+- Scene Manager: reordering only moves clips on the chosen track; audio, subtitles and clips on other tracks stay where they are.
+- Assistant: if it still fails, the red message now says why. The usual first-time cause is an API key with no credit (separate from a Claude chat subscription).

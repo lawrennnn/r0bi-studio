@@ -1,0 +1,53 @@
+# Decisions
+- **Build tooling:** Vite for the renderer, plain `tsc` (CommonJS) for Electron main/preload. Avoids extra plugins and keeps the sandboxed preload simple.
+- **Tailwind 3.4** (not 4) for stability with PostCSS and shadcn-style components.
+- **Shared Zod schema** in `shared/` so main and renderer validate the same shape.
+- **Snapshot undo/redo** (structuredClone) for now; revisit with patches if projects get large.
+- **Main owns paths:** the renderer cannot request arbitrary file paths.
+- **Dev server on 127.0.0.1:5173** to avoid IPv6 `localhost` mismatch with wait-on.
+- **shadcn/ui deferred:** no component needs it yet.
+- **SQLite still deferred (decided in Phase 2):** media metadata lives in versioned project.json. better-sqlite3 is a native module that must be compiled for Electron and was a real install risk on this machine (npm already blocks install scripts); node:sqlite needs a newer Node than Electron 33 ships. Revisit with sql.js (pure WASM) when a feature needs queries/search across many assets.
+- **Media is referenced, not copied:** keeps large videos on disk once and never touches originals. Files inside the project folder get relative paths. A "copy into project" option can be added later.
+- **FFmpeg resolution order:** R0BI_FFMPEG/R0BI_FFPROBE env vars, then system PATH, then bundled @ffmpeg-installer / @ffprobe-installer packages (no install scripts, so they work with the user's npm). The bundled builds are old (FFmpeg 4.1) and GPL-licensed: fine for personal use; before distributing the app, switch to an LGPL build or require a system FFmpeg.
+- **Thumbnails as data URLs over IPC:** no custom protocol or file access in the renderer, keeps the CSP strict.
+- **Drag-and-drop paths are validated in main** (absolute, supported extension, exists, ffprobe must accept it).
+- **Clip times are integer frames at project fps.** Changing fps rescales every clip (rounding both edges so neighbours stay adjacent, then repairing any 1-frame overlap). Source out is derived (source in + duration), speed is always 1x for now.
+- **No overlapping clips per track.** Instead of overwrite/ripple modes, placement and moves go to the nearest free slot. Simple and cannot destroy footage; ripple/overwrite can be added later.
+- **Single clip selection** (no multi-select/group moves yet) to keep drag behaviour predictable.
+- **All timeline edits go through `src/store/timelineActions.ts` and `shared/timeline.ts`** (pure functions). The UI only previews during a drag and commits once on release.
+- **Video clips carry their own audio**; there are no separate extracted-audio clips until Phase 5.
+- **Preview uses native <video>/<audio>/<img> elements** driven by the playhead, not a canvas/Remotion render. It is light on memory and keeps audio in sync for free. Remotion stays reserved for effect-heavy composition if needed later; export uses FFmpeg (Phase 6) so the preview is a close approximation, not a pixel-exact render.
+- **`r0bi-media://` private protocol** (registered privileged: standard, secure, stream) serves only registered library files with range support. A registry is refreshed by the existing media refresh call, so the renderer can never request an arbitrary path.
+- **Layer order:** first timeline row = top layer. Fit mode is `contain` (letterbox); export must match this.
+- **Playhead is the clock:** playback time comes from performance.now(); video elements are corrected if they drift by more than 0.3 s.
+- **Per-frame React cost is contained:** components subscribe to single store fields, and only the playhead line, preview and timecode re-render each frame.
+- **Volume is 0-100% only (for now).** The preview uses the media element volume (max 1.0). Boosting above 100% needs WebAudio, which silently outputs nothing for cross-origin media unless CORS is set up exactly right; that is too risky to ship untested. Revisit once real-window testing is possible. Export (Phase 6) will use the same gain numbers.
+- **Fades are linear, in whole frames,** measured from the clip edges; fade-in wins if both would not fit.
+- **Subtitles are their own cue list**, not media clips, with style stored per subtitle track (so Khmer and English tracks can look different). Cues are dragged/trimmed through the clip helpers as unlimited-length stand-ins, so the same no-overlap and snapping rules apply.
+- **SRT import never overwrites:** it fills an empty subtitle track or creates one. Overlapping cues in a file are shortened to end where the next begins.
+- **Waveforms are computed in the main process** by decoding to 8 kHz mono and keeping per-20 ms peaks (square-rooted so quiet audio is visible), cached by asset id + file size.
+- **Subtitle text rendering uses CSS** (text stroke with paint-order, background box). Export will burn subtitles with FFmpeg; matching the look exactly is part of Phase 6.
+- **One FFmpeg pass with per-clip inputs** (`-ss <in> -t <len> -i file` for each clip) instead of trim filters on shared inputs: seeking is fast and frame-accurate when re-encoding, and memory stays flat. Very long filter graphs go through a script file (`-filter_complex_script`, retrying `-/filter_complex` for FFmpeg 7+); the Windows 32k command-line limit is checked.
+- **Subtitles are burned in as images, not with libass/drawtext.** The app draws each distinct subtitle on a transparent canvas (same code path as the preview's look, perfect Khmer shaping, no font-config differences) and FFmpeg plays them through the concat demuxer into one overlay per track. Cost: line breaking and the background box are close to, not pixel-identical with, the preview.
+- **Mix levels:** every clip's audio is padded to the full length so `amix`'s 1/N scaling is constant, and `volume=N` undoes it; this behaves the same on old and new FFmpeg (no reliance on the newer `normalize=0`). Mono sources are copied to both channels so they are as loud as in the preview.
+- **Export uses a snapshot of the project** taken when it is queued, so editing while it renders cannot change the result. Output folders are chosen by the main process (a dialog), never sent by the page.
+- **Verification before the final name:** a file only appears under its real name if FFprobe confirms what we asked for.
+- **Always an audio track:** if nothing makes sound, a silent AAC track is written for player compatibility.
+- **The assistant is a planner, not an actor.** Claude must answer through one forced tool (`propose_plan`) whose output is validated by a strict zod schema; execution is by pure functions on a copy of the project, so a plan can only do what manual editing can do, never run commands, read files or reach the network. All-or-nothing, previewed step by step, one undo step.
+- **Short aliases instead of real ids** (t1/a1/c1/s1) in both directions: cheaper, prevents the model from inventing or leaking ids, and unknown aliases are plain errors. Names for things created mid-plan are deterministic.
+- **Metadata only by default.** No paths, no media. Thumbnails only if the user ticks the box for that request, max 8 small images.
+- **API key handling:** main process only, encrypted with safeStorage (DPAPI), refused if encryption is unavailable (no plain-text fallback), never returned to the page, never logged, redacted from error messages. Calls are made from the main process, so the page's CSP still allows no external connections.
+- **Model list is a convenience, not a dependency:** Haiku/Sonnet/Opus 5.5 presets plus a free-text model name, so new models work without an app update.
+- **Transitions = picture fades** (opacity ramps), not overlapping clips: keeps the no-overlap rule intact. A dissolve is a fade-in on a clip placed on a higher track over another; across one track a cut becomes a dip to black.
+- **Volume stays 0-100%** in AI commands too (see the Phase 5 decision).
+- **Automation shares the editor's engine.** Assembly, scene insertion and template application are pure functions that return new tracks/clips and are applied with one `commit`, so each is one undo step and obeys the same no-overlap, source-bound and fade rules (validated after every operation, plus randomised tests). The AI assistant can be extended later to call them.
+- **Templates never contain clips.** They capture structure and looks only; the assembly recipe travels with them, so "template + assemble" reproduces an episode layout.
+- **Scenes reference media by absolute path** (not project ids) so they work across projects; inserting imports missing files through the normal import path (ffprobe, thumbnails). If a file moved, the scene reports it instead of guessing.
+- **Library storage:** one JSON file per kind in the app data folder (`templates.json`, `scenes.json`, `presets.json`), atomic writes, schema-validated on load. A database is not needed at this size (500 items per kind).
+- **Batch export does not open other projects for editing.** The main process reads each `project.json` read-only, hands the page a validated copy plus an opaque token, and resolves media relative to that project's folder itself; the page can never name a folder.
+- **Subtitle images are drawn per job** (also in batch), because the output size differs per preset.
+- **Music does not loop** in assembly; a short music file stops early and the report says so.
+- **Zoom uses `zoompan`, not `scale` with expressions.** The scale filter only understands time/frame variables in newer FFmpeg (4.3+), and the bundled build is 2018. `zoompan` exists in every version, so zoom works everywhere; its limits are zoom >= 100% (no shrinking) and integer-pixel steps, hence the 2x pre-scale (slower, smoother). Position animation uses overlay x/y expressions, which have always supported time.
+- **Effects are optional data on a clip** (`effects`, absent = none) so existing code and projects need no changes. Zoom and position run in a straight line across the clip's own length; trimming a clip rescales the motion over its new length, while splitting preserves it smoothly.
+- **Dissolve = overlap on a higher track**, not an overlap on one track, so the no-overlap rule stays intact and later clips never move.
+- **The Scene Manager is a view of one track**, not a second data model: scenes are clips, so every edit uses the same validated timeline actions and undo.
